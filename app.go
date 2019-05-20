@@ -2,11 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
 )
 
 type Repo struct {
@@ -17,8 +20,16 @@ type Repo struct {
 var repos []Repo
 
 func ReposHelper(w http.ResponseWriter, req *http.Request) {
-	all_repos := fetchResource("https://api.github.com/users/vmware/repos")
+	all_repos := fetchResource(os.Getenv("REPOS_URL"))
 	json.NewEncoder(w).Encode(all_repos)
+}
+
+func GeneralinfoHelper(w http.ResponseWriter, req *http.Request) {
+	params := mux.Vars(req)
+	url := fmt.Sprintf("%s/%s", os.Getenv("GENERALINFO_URL"), params["repo"])
+	general_info := fetchResource(url)
+	json.NewEncoder(w).Encode(general_info)
+
 }
 
 func fetchResource(url string) interface{} {
@@ -47,8 +58,18 @@ func fetchResource(url string) interface{} {
 }
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	port := os.Getenv("PORT")
+
+	fmt.Println(fmt.Sprintf("The server is running on port %s", port))
+
 	router := mux.NewRouter()
 	router.HandleFunc("/repos", ReposHelper).Methods("GET")
+	router.HandleFunc("/generalinfo/{repo}", GeneralinfoHelper).Methods("GET")
 
-	log.Fatal(http.ListenAndServe(":8081", router))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", port), router))
 }
