@@ -5,19 +5,24 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/joho/godotenv"
 )
 
+func setup() {
+	godotenv.Load()
+}
+
 func TestReposHelper(t *testing.T) {
-	req, err := http.NewRequest("GET", "https://api.github.com/users/vmware/repos", nil)
+	setup()
+
+	req, err := http.NewRequest("GET", "/repos", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// We create a ResponseRecorder (which satisfies http.ResponseWriter) to record the response.
 	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(ReposHelper)
-
-	handler.ServeHTTP(rr, req)
+	ReposHelper(rr, req)
 
 	// Check the status code is what we expect.
 	if status := rr.Code; status != http.StatusOK {
