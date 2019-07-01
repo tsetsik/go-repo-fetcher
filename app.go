@@ -20,19 +20,35 @@ type Repo struct {
 var repos []Repo
 
 func ReposHelper(w http.ResponseWriter, req *http.Request) {
-	all_repos := fetchResource(os.Getenv("REPOS_URL"))
-	json.NewEncoder(w).Encode(all_repos)
+	repondWithError(os.Getenv("REPOS_URL"), w)
 }
 
 func GeneralinfoHelper(w http.ResponseWriter, req *http.Request) {
 	params := mux.Vars(req)
 	url := fmt.Sprintf("%s/%s", os.Getenv("GENERALINFO_URL"), params["repo"])
-	general_info := fetchResource(url)
-	json.NewEncoder(w).Encode(general_info)
+
+	repondWithError(url, w)
+}
+
+func repondWithError(url string, w http.ResponseWriter) {
+	resp, result := fetchResource(url)
+
+	w.WriteHeader(resp.StatusCode)
+
+	str_response := map[string]interface{}{"error": false, "data": nil, "message": ""}
+
+	if resp.StatusCode >= 400 {
+		str_response["error"] = true
+		str_response["message"] = "Something went wrong"
+	} else {
+		str_response["data"] = result
+	}
+
+	json.NewEncoder(w).Encode(str_response)
 
 }
 
-func fetchResource(url string) interface{} {
+func fetchResource(url string) (*http.Response, interface{}) {
 	resp, error := http.Get(url)
 	if error != nil {
 		panic(error.Error())
@@ -44,22 +60,15 @@ func fetchResource(url string) interface{} {
 	}
 
 	var data interface{}
-	err = json.Unmarshal(body, &data)
-	if err != nil {
+	if err = json.Unmarshal(body, &data); err != nil {
 		panic(err.Error())
 	}
 
-	json.Unmarshal(body, &data)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	return data
+	return resp, data
 }
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
+	if err := godotenv.Load(); err != nil {
 		panic(err.Error())
 	}
 
