@@ -14,19 +14,32 @@ import (
 	"github.com/joho/godotenv"
 )
 
-type Repo struct {
-	id   int
-	name string
-}
-
-var repos []Repo
-
 var jwtKey = []byte(os.Getenv("JWT_KEY"))
 
 type Response struct {
 	Error   bool        `json:"error"`
 	Data    interface{} `json:"data"`
 	Message string      `json:"message"`
+}
+
+const TOKEN_HEADER = "X-JWT-TOKEN"
+
+type Token struct {
+	token *jwt.Token
+	str   string
+}
+
+func (t *Token) Valid() bool {
+	fmt.Println("The token str is: ", t.str)
+
+	return true
+}
+
+func (t *Token) Create() string {
+	t.token = jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"ExpiresAt": time.Now().Add(48 * time.Hour)})
+	t.str, _ = t.token.SignedString(jwtKey)
+
+	return t.str
 }
 
 func ReposHelper(w http.ResponseWriter, req *http.Request) {
@@ -46,15 +59,14 @@ func AuthHelper(w http.ResponseWriter, req *http.Request) {
 	response := &Response{Error: false, Data: "", Message: ""}
 
 	if username != os.Getenv("USERNAME") || password != os.Getenv("PASSWORD") {
+		w.WriteHeader(http.StatusUnauthorized)
 		response.Error = true
-		response.Message = "Wrong username and/or password"
+		response.Message = "Unatuhorized request"
 	} else {
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"ExpiresAt": time.Now().Add(48 * time.Hour)})
-		tokenString, _ := token.SignedString(jwtKey)
+		token := &Token{}
+		w.Header().Set(TOKEN_HEADER, token.Create())
 
-		fmt.Println("Token is", tokenString)
-
-		response.Data = map[string]interface{}{"token": token}
+		response.Data = map[string]interface{}{"username": username}
 	}
 
 	json.NewEncoder(w).Encode(response)
@@ -97,6 +109,20 @@ func fetchResource(url string) (*http.Response, interface{}) {
 	return resp, data
 }
 
+func authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// Do stuff here
+		token := &Token{str: req.Header.Get(TOKEN_HEADER)}
+
+		if req.URL.Path != "/auth" {
+			fmt.Println("The string is: ", token.Valid())
+		}
+
+		// Call the next handler, which can be another middleware in the chain, or the final handler.
+		next.ServeHTTP(w, req)
+	})
+}
+
 func main() {
 	if err := godotenv.Load(); err != nil {
 		panic(err.Error())
@@ -107,6 +133,10 @@ func main() {
 	fmt.Println(fmt.Sprintf("The server is running on port %s", port))
 
 	router := mux.NewRouter()
+
+	// Register auth middleware
+	router.Use(authMiddleware)
+
 	router.HandleFunc("/repos", ReposHelper).Methods("GET")
 	router.HandleFunc("/generalinfo/{repo}", GeneralinfoHelper).Methods("GET")
 	router.HandleFunc("/auth", AuthHelper).Methods("POST")
