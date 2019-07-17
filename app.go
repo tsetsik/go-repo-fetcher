@@ -17,9 +17,10 @@ import (
 var jwtKey = []byte(os.Getenv("JWT_KEY"))
 
 type Response struct {
-	Error   bool        `json:"error"`
-	Data    interface{} `json:"data"`
-	Message string      `json:"message"`
+	Error      bool        `json:"error"`
+	Data       interface{} `json:"data"`
+	Message    string      `json:"message"`
+	statusCode int
 }
 
 const TOKEN_HEADER = "X-JWT-TOKEN"
@@ -29,10 +30,20 @@ type Token struct {
 	str   string
 }
 
-func (t *Token) Valid() bool {
-	fmt.Println("The token str is: ", t.str)
+func (t *Token) initiateFromStr() error {
+	token, err := jwt.Parse(t.str, func(token *jwt.Token) (interface{}, error) {
+		return jwtKey, nil
+	})
 
-	return true
+	if err == nil {
+		t.token = token
+	}
+
+	return err
+}
+
+func (t Token) Valid() bool {
+	return t.token.Valid
 }
 
 func (t *Token) Create() string {
@@ -75,17 +86,22 @@ func AuthHelper(w http.ResponseWriter, req *http.Request) {
 func respondWithError(url string, w http.ResponseWriter) {
 	resp, result := fetchResource(url)
 
-	w.WriteHeader(resp.StatusCode)
-	w.Header().Set("Content-Type", "application/json")
+	respond(resp.StatusCode, result, "Something went wrong", w)
+}
 
-	response := &Response{Error: false, Data: "", Message: ""}
+func respond(status int, data interface{}, msg string, w http.ResponseWriter) {
+	response := &Response{Error: false, Data: data, Message: msg, statusCode: http.StatusOK}
 
-	if resp.StatusCode >= 400 {
+	if status >= 400 {
 		response.Error = true
+		response.statusCode = status
 		response.Message = "Something went wrong"
 	} else {
-		response.Data = result
+		response.Data = data
 	}
+
+	w.WriteHeader(response.statusCode)
+	w.Header().Set("Content-Type", "application/json")
 
 	json.NewEncoder(w).Encode(response)
 }
@@ -111,15 +127,20 @@ func fetchResource(url string) (*http.Response, interface{}) {
 
 func authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		// Do stuff here
-		token := &Token{str: req.Header.Get(TOKEN_HEADER)}
+		has_error := false
 
 		if req.URL.Path != "/auth" {
-			fmt.Println("The string is: ", token.Valid())
+			token := &Token{str: req.Header.Get(TOKEN_HEADER)}
+			if err := token.initiateFromStr(); err != nil || !token.Valid() {
+				has_error = true
+				respond(http.StatusUnauthorized, "", "Unauthorized access", w)
+			}
 		}
 
 		// Call the next handler, which can be another middleware in the chain, or the final handler.
-		next.ServeHTTP(w, req)
+		if has_error == false {
+			next.ServeHTTP(w, req)
+		}
 	})
 }
 
