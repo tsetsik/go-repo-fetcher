@@ -54,14 +54,14 @@ func (t *Token) Create() string {
 }
 
 func ReposHelper(w http.ResponseWriter, req *http.Request) {
-	respondWithError(os.Getenv("REPOS_URL"), w)
+	respondWithResource(os.Getenv("REPOS_URL"), w)
 }
 
 func GeneralinfoHelper(w http.ResponseWriter, req *http.Request) {
 	params := mux.Vars(req)
 	url := fmt.Sprintf("%s/%s", os.Getenv("GENERALINFO_URL"), params["repo"])
 
-	respondWithError(url, w)
+	respondWithResource(url, w)
 }
 
 func AuthHelper(w http.ResponseWriter, req *http.Request) {
@@ -83,7 +83,7 @@ func AuthHelper(w http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func respondWithError(url string, w http.ResponseWriter) {
+func respondWithResource(url string, w http.ResponseWriter) {
 	resp, result := fetchResource(url)
 
 	respond(resp.StatusCode, result, "Something went wrong", w)
